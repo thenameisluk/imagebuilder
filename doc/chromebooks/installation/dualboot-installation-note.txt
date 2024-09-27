@@ -1,0 +1,208 @@
+attempt nr.1
+device: ideapad duet 3
+bios language: italian
+
+for some reason tablet trogdor devices have
+diffren recovery image, for "strongboard" board
+but o well, time to wipe this thing, i will
+miss my splash screen ;-;
+
+_The deivce is being restored_
+
+despinet not being as attached to it as i am
+to my homestar, i still used the device for
+some time, it's fairly nice and i will miss it 
+
+hopefully it's just temporary
+
+...
+
+the system is still recovering, this might take
+a while
+
+sidenote. i got the image from https://cros.tech
+it has pretty much all chromebook recovery images
+
+...
+
+damn it's really long, this device doesn't even
+have that much storage
+
+the recovery screen looks modern
+
+_Device finished recovering_
+
+well time to read the guide, i've already
+prepared a translated version
+
+https://zyyme-com.translate.goog/arm-chromebook-cgpt.html?_x_tr_sl=auto&_x_tr_tl=pl&_x_tr_hl=pl&_x_tr_pto=wapp
+
+while translation is probaly a bit iffy, it
+should do the trick
+
+_Time to do it_
+
+on chromeos i went into tty and gained root
+sudo -i
+
+cgpt show /dev/mmcblk0 | more 
+showed 3 kernel partitions
+A succefull - 2
+B unknown - 4
+C unknown - 6
+
+save the output into /boot/cgpt.out
+
+the theory is simple
+i can set the atributes with
+
+cgpt add -i <partition_index> -P <priority> -T <tries> -S <success> /dev/mmcblk0
+
+the bootloader will always boot partition succesfull or to try partition with
+the highest priority
+
+
+next
+in order to prevent chromeos updates which would break stuff i need to
+sudo -i
+mkdir -p /mnt/stateful_partition/etc
+echo "CHROMEOS_RELEASE_VERSION=99999.9.9" > /mnt/stateful_partition/etc/lsb-release
+sync
+reboot
+
+lsblk output was saved into
+/boot/lsblk.out
+
+so for whatever reason the guide just said complete bogus i didn't feel like
+listening so i tried to do it my own way and rebooted into debian
+
+the device rebooted ofc because screen rotation stuff, thank you <3
+
+i've halfed the size of first partition (with cfdisk and stuff) since i felt like it
+sudo e2fsck -f /dev/mmcblk1p1 #check the fs before resize
+sudo resize2fs /dev/mmcblk1p1 58G # resize fs
+sudo cfdisk /dev/mmcblk1 # resize partition
+and resized it to 58G
+
+since partition B was unused i might as well use it for the kernel
+
+now i have to add /boot and / partition
+and since i shrunk that partition before i could use it free space for that
+
+new paritions at /boot/lsblk.new.out
+
+
+now i will go from reular install guide with some extra steps
+
+first of all i needed velvet tools to not deal with generating kernel myself
+
+_Quick installation later_
+
+setting auto flash to manual
+and main partition to /dev/mmcblk1p4
+
+partitions
+/boot p13
+/ p14
+swap p15
+
+mkfs -t ext4 -O ^has_journal -m 0 -L bootemmc /dev/mmcblk1p13
+mkfs -t btrfs -m single -L rootemmc /dev/mmcblk1p14
+mount -o ssd,compress-force=zstd,noatime,nodiratime /dev/mmcblk1p14 /mnt
+mkdir -p /mnt/boot
+mount /dev/mmcblk1p13 /mnt/boot
+mkswap /dev/mmcblk1p15
+
+rsync -axADHSX --no-inc-recursive --delete /boot/ /mnt/boot
+rsync -axADHSX --no-inc-recursive --delete --exclude='/swap/*' / /mnt
+
+fixup the labels
+
+sed -i 's,bootpart,bootemmc,g;s,rootpart,rootemmc,g' /mnt/etc/fstab
+
+...
+
+damn it takes so long
+
+...
+
+i needed to chroot into it to generate the kpart
+
+chroot /mnt mount -t proc proc /proc 
+chroot /mnt mount -t sysfs sysfs /sys 
+mount --bind /dev /mnt/dev 
+mount --bind /run /mnt/run
+chroot /mnt
+
+export PS1="(chroot) ${PS1}"
+
+update-initramfs -c -k 6.1.51-stb.cbq
+velvet tools will generate the image
+
+added initramfs compression and redid again since image was too big 
+
+nano /mnt/etc/initramfs-tools/conf.d/compress
+
+COMPRESS=xz
+XZ_OPT='-9 --check=crc32 –memlimit-compress=25%'
+
+i also did
+vthelp dtbs
+but it's a bit hard to explain
+
+let's flash the image
+
+just dd it
+
+cgpt add -i 2 -P 15 -T 1 -S 0 /dev/mmcblk0 # chromeos trial only
+cgpt add -i 4 -P 10 -T 0 -S 1 /dev/mmcblk0 # debian succesfull
+
+after reboot we get chromeos
+
+reboot again and we go debian
+
+when we run
+cgpt add -i 2 -P 2 -T 1 -S 0 /dev/mmcblk0
+we will boot into chromeos again
+
+you can flash kernel with vtflash <version>
+and set auto_flash to forced if you want it to flash 
+automaticallly (not good for testing kernel)
+
+sounds simple enough
+
+and that's how we do it
+
+...
+
+damn they want me to pay extra 15 pln to play minecraft
+on chromeos, who needs chromeos anyway idk but ...
+this setup can be use in much more trivial way
+with other linux distros.
+
+that is if you decide to port them, i always wanted
+to try nix and lfs so i might actully look into that
+
+either way this notes should be enough to get you this
+setup but they might be a bit unreadable and lack the
+.out files. still it should be more than that chinese
+guide could help and english speaking man so success 🎉
+
+
+post installation
+
+# how to recover from chromeos update
+
+if you for some reason don't disable the updatea
+
+sudo -i
+cd /home/root
+mkdir mount
+mount /dev/mmcblk1p13 #mount boot partition
+cd mount
+# in theory a parition should always be the chromeos one
+
+dd if=./vmlinux... of=/dev/mmcblk1p4 # flash b partition
+
+cgpt add -i 2 -P 15 -T 0 -S 0 /dev/mmcblk0 # chromeos trial only
+cgpt add -i 4 -P 10 -T 0 -S 1 /dev/mmcblk0 # debian succesfull
