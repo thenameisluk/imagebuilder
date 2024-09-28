@@ -204,5 +204,5 @@ cd mount
 
 dd if=./vmlinux... of=/dev/mmcblk1p4 # flash b partition
 
-cgpt add -i 2 -P 15 -T 0 -S 0 /dev/mmcblk0 # chromeos trial only
-cgpt add -i 4 -P 10 -T 0 -S 1 /dev/mmcblk0 # debian succesfull
+cgpt add -i 2 -P 15 -T 0 -S 0 /dev/mmcblk1 # chromeos trial only
+cgpt add -i 4 -P 10 -T 0 -S 1 /dev/mmcblk1 # debian succesfull
